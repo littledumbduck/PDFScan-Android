@@ -177,7 +177,7 @@ object PdfTools {
     }
 
     suspend fun extractText(input: File): String = io {
-        open(input).use { PDFTextStripper().getText(it) }
+        open(input).use { PDFTextStripper().apply { sortByPosition = true }.getText(it) }
     }
 
     /** Coloca firmas y textos sobre las páginas. */

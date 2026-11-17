@@ -69,6 +69,15 @@ fun PageScreen(
     val scope = rememberCoroutineScope()
     val current = doc.pages.getOrNull(pager.currentPage) ?: doc.pages.last()
     var filterMenu by remember { mutableStateOf(false) }
+    // Página que se acaba de mover: cuando llegue la lista reordenada, el visor salta a su nueva posición.
+    var follow by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(doc.pages) {
+        follow?.let { f ->
+            val i = doc.pages.indexOfFirst { it.file == f }
+            if (i >= 0) pager.scrollToPage(i)
+            follow = null
+        }
+    }
     var confirmDelete by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -83,8 +92,8 @@ fun PageScreen(
             BottomAppBar {
                 IconButton(
                     onClick = {
+                        follow = current.file
                         vm.movePage(doc.id, current.file, -1)
-                        scope.launch { pager.scrollToPage((pager.currentPage - 1).coerceAtLeast(0)) }
                     },
                     enabled = pager.currentPage > 0,
                 ) { Icon(Icons.Default.ChevronLeft, "Mover antes") }
@@ -107,8 +116,8 @@ fun PageScreen(
                 IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, "Eliminar página") }
                 IconButton(
                     onClick = {
+                        follow = current.file
                         vm.movePage(doc.id, current.file, 1)
-                        scope.launch { pager.scrollToPage((pager.currentPage + 1).coerceAtMost(doc.pages.lastIndex)) }
                     },
                     enabled = pager.currentPage < doc.pages.lastIndex,
                 ) { Icon(Icons.Default.ChevronRight, "Mover después") }

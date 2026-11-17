@@ -115,7 +115,7 @@ fun DocumentScreen(
                         navigationIcon = {
                             IconButton(onClick = { selection = emptySet() }) { Icon(Icons.Default.Close, "Cancelar") }
                         },
-                        title = { Text("${validSelection.size} páginas") },
+                        title = { Text(if (validSelection.size == 1) "1 página" else "${validSelection.size} páginas") },
                         actions = {
                             IconButton(onClick = {
                                 validSelection.forEach { vm.rotatePage(doc.id, it) }

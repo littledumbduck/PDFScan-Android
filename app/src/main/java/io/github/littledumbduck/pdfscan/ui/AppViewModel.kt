@@ -84,8 +84,20 @@ class AppViewModel(app: Application, private val saved: SavedStateHandle) : Andr
 
     private val ocrMutex = Mutex()
 
+    /** Documentos con OCR en cola o en curso (evita encolar el mismo dos veces). */
+    private val ocrQueued = mutableSetOf<String>()
+
     init {
         viewModelScope.launch { repo.load() }
+        // OCR automático para cualquier documento al que le falte texto, venga de donde venga
+        // (escáner, importación, "Añadir a Escaneos" desde las herramientas PDF, páginas rotadas…).
+        viewModelScope.launch {
+            repo.documents.collect { docs ->
+                if (!settings.value.autoOcr) return@collect
+                docs.filter { d -> d.pages.any { it.ocr == null } && d.id !in ocrQueued }
+                    .forEach { runOcr(it.id, notify = false) }
+            }
+        }
     }
 
     fun setQuery(q: String) = _query.update { q }
@@ -181,6 +193,7 @@ class AppViewModel(app: Application, private val saved: SavedStateHandle) : Andr
     }
 
     fun runOcr(id: String, notify: Boolean = true) {
+        if (!ocrQueued.add(id)) return
         viewModelScope.launch {
             ocrMutex.withLock {
                 _ocrRunning.update { it + id }
@@ -200,9 +213,10 @@ class AppViewModel(app: Application, private val saved: SavedStateHandle) : Andr
                     }
                     if (notify) _messages.send("Texto reconocido")
                 } catch (e: Exception) {
-                    _messages.send("Error de OCR: ${e.message ?: e.javaClass.simpleName}")
+                    if (notify) _messages.send("Error de OCR: ${e.message ?: e.javaClass.simpleName}")
                 } finally {
                     _ocrRunning.update { it - id }
+                    ocrQueued.remove(id)
                 }
             }
         }

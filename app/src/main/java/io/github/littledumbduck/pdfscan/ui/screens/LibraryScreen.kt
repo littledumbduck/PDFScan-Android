@@ -50,6 +50,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -106,7 +109,7 @@ fun LibraryScreen(
                     navigationIcon = {
                         IconButton(onClick = { selection = emptyList() }) { Icon(Icons.Default.Close, "Cancelar") }
                     },
-                    title = { Text("${selection.size} seleccionados") },
+                    title = { Text(if (selection.size == 1) "1 seleccionado" else "${selection.size} seleccionados") },
                     actions = {
                         if (selection.size >= 2) {
                             IconButton(onClick = { vm.merge(selection); selection = emptyList() }) {
@@ -124,6 +127,8 @@ fun LibraryScreen(
                         }
                     },
                     title = {
+                        val focus = remember { FocusRequester() }
+                        LaunchedEffect(Unit) { focus.requestFocus() }
                         TextField(
                             value = query,
                             onValueChange = vm::setQuery,
@@ -133,7 +138,7 @@ fun LibraryScreen(
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
                             ),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().focusRequester(focus),
                         )
                     },
                     actions = {
