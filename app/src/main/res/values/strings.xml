@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PDFScan</string>
+    <string name="tile_label">Escanear</string>
+    <string name="shortcut_scan_short">Escanear</string>
+    <string name="shortcut_scan_long">Escanear documento</string>
+</resources>
