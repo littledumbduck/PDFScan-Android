@@ -10,11 +10,11 @@ import io.github.littledumbduck.pdfscan.data.ScanDocument
 import io.github.littledumbduck.pdfscan.util.PageFilter
 import io.github.littledumbduck.pdfscan.util.ShareUtils
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -52,12 +52,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _ocrRunning = MutableStateFlow<Set<String>>(emptySet())
     val ocrRunning: StateFlow<Set<String>> = _ocrRunning.asStateFlow()
 
-    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
-    val messages = _messages.asSharedFlow()
+    private val _messages = Channel<String>(Channel.BUFFERED)
+    val messages = _messages.receiveAsFlow()
 
     /** Documento recién creado que la UI debe abrir. */
-    private val _openDocument = MutableSharedFlow<String>(extraBufferCapacity = 1)
-    val openDocument = _openDocument.asSharedFlow()
+    private val _openDocument = Channel<String>(Channel.BUFFERED)
+    val openDocument = _openDocument.receiveAsFlow()
 
     /** Si no es null, el próximo escaneo añade páginas a este documento en lugar de crear uno nuevo. */
     var scanTarget: String? = null
@@ -85,7 +85,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         scanTarget = null
         work("Guardando páginas…") {
             val doc = if (target != null && repo.get(target) != null) repo.addPages(target, uris)
-            else repo.createFromUris(uris).also { _openDocument.emit(it.id) }
+            else repo.createFromUris(uris).also { _openDocument.send(it.id) }
             autoOcr(doc.id)
         }
     }
@@ -94,7 +94,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (uris.isEmpty()) return
         work("Importando imágenes…") {
             val doc = repo.createFromUris(uris, ScanDocumentNames.imported())
-            _openDocument.emit(doc.id)
+            _openDocument.send(doc.id)
             autoOcr(doc.id)
         }
     }
@@ -102,7 +102,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun importPdf(uri: Uri) {
         work("Importando PDF…") {
             val doc = repo.importPdf(uri)
-            _openDocument.emit(doc.id)
+            _openDocument.send(doc.id)
             autoOcr(doc.id)
         }
     }
@@ -113,21 +113,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun delete(ids: Collection<String>) = work {
         repo.delete(ids)
-        _messages.emit(if (ids.size == 1) "Documento eliminado" else "${ids.size} documentos eliminados")
+        _messages.send(if (ids.size == 1) "Documento eliminado" else "${ids.size} documentos eliminados")
     }
 
     fun merge(ids: List<String>) = work("Uniendo documentos…") {
         val names = ids.mapNotNull { repo.get(it)?.name }
         val doc = repo.merge(ids, "Unión de ${names.size} documentos")
-        _messages.emit("Documento unido creado")
-        _openDocument.emit(doc.id)
+        _messages.send("Documento unido creado")
+        _openDocument.send(doc.id)
     }
 
     fun extract(id: String, files: Set<String>) = work("Extrayendo páginas…") {
         val src = repo.get(id) ?: return@work
         val doc = repo.extract(id, files, "${src.name} (extracto)")
-        _messages.emit("${files.size} página(s) extraídas a un documento nuevo")
-        _openDocument.emit(doc.id)
+        _messages.send("${files.size} página(s) extraídas a un documento nuevo")
+        _openDocument.send(doc.id)
     }
 
     /** Propone un nombre a partir de la primera línea con sentido del texto OCR. */
@@ -142,7 +142,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val doc = repo.deletePages(id, files)
         if (doc.pages.isEmpty()) {
             repo.delete(listOf(id))
-            _messages.emit("Documento vacío eliminado")
+            _messages.send("Documento vacío eliminado")
         }
     }
 
@@ -175,9 +175,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         val result = container.ocr.recognize(repo.pageFile(doc, page))
                         repo.setOcr(id, page.file, result)
                     }
-                    if (notify) _messages.emit("Texto reconocido")
+                    if (notify) _messages.send("Texto reconocido")
                 } catch (e: Exception) {
-                    _messages.emit("Error de OCR: ${e.message ?: e.javaClass.simpleName}")
+                    _messages.send("Error de OCR: ${e.message ?: e.javaClass.simpleName}")
                 } finally {
                     _ocrRunning.update { it - id }
                 }
@@ -220,7 +220,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val doc = repo.get(id) ?: return
         val text = doc.fullText
         if (text.isBlank()) {
-            _messages.tryEmit("No hay texto reconocido todavía")
+            _messages.trySend("No hay texto reconocido todavía")
             return
         }
         ShareUtils.shareText(getApplication(), text, doc.name)
@@ -239,7 +239,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     ?: error("No se pudo escribir el archivo")
             }
             pdf.delete()
-            _messages.emit("PDF guardado")
+            _messages.send("PDF guardado")
         }
     }
 
@@ -255,7 +255,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 block()
             } catch (e: Exception) {
-                _messages.emit("Error: ${e.message ?: e.javaClass.simpleName}")
+                _messages.send("Error: ${e.message ?: e.javaClass.simpleName}")
             } finally {
                 if (label != null) _busy.value = null
             }

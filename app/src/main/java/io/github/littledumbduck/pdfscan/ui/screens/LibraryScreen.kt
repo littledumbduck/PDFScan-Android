@@ -74,6 +74,7 @@ import java.util.Date
 fun LibraryScreen(
     vm: AppViewModel,
     snackbar: SnackbarHostState,
+    bottomBar: @Composable () -> Unit,
     onOpen: (String) -> Unit,
     onScan: () -> Unit,
     onImportImages: () -> Unit,
@@ -98,6 +99,7 @@ fun LibraryScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = { if (!selecting) bottomBar() },
         topBar = {
             when {
                 selecting -> TopAppBar(

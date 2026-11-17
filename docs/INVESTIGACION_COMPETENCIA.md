@@ -281,6 +281,44 @@ Si algún día se monetiza, evitar los anti-patrones de la sección 3:
 
 ---
 
+## 8. Segunda parte: apps de herramientas PDF (el "2x1")
+
+> Añadido en noviembre de 2026. Objetivo: que PDFScan sea también una navaja suiza de PDF
+> (unir, dividir, firmar, comprimir…) además de escáner.
+
+| App | Para qué la usa la gente | Lo que alaban en reseñas | Lo que critican en reseñas |
+|---|---|---|---|
+| **iLovePDF** (4,6★ Play, ~320k reseñas) | Unir, dividir, comprimir, convertir | Muy fácil, conversiones rápidas | Límites en la versión gratis, pop-ups que bloquean herramientas, firmas que no se guardan en gratis, **sube los archivos a su nube** (privacidad) |
+| **Smallpdf** | Comprimir y conversiones rápidas | La mejor compresión, interfaz limpia | Muy pocas tareas gratis al día, todo en la nube |
+| **Xodo** | Anotar, firmar, rellenar formularios | Rápido, buen soporte de lápiz, plan gratis generoso | Suscripción cara (~9–13 $/mes; "100 $/año por rellenar formularios"), problemas al guardar |
+| **Adobe Acrobat Reader** | Leer y firmar | Fiable para leer y para firma | Editar, unir o comprimir es de pago, cuenta Adobe |
+| **PDFelement / Foxit / WPS** | Edición completa de texto | Edición tipo escritorio | Lo útil es de pago; WPS con anuncios |
+| **PDFgear** | Todo gratis | Sin anuncios, sin registro, unir/dividir/firmar gratis | App de Android reciente, poco probada |
+
+**Patrón común en las quejas:** límites diarios, anuncios, suscripciones y, sobre todo, **subir documentos
+privados a un servidor** para operaciones que se pueden hacer en el móvil.
+
+### Herramientas que incorpora PDFScan (v0.2) — todo offline y sin límites
+
+| Herramienta | Inspirada en | Notas |
+|---|---|---|
+| Unir PDFs (mezclando PDFs del móvil y escaneos) | iLovePDF, PDFgear | Orden editable |
+| Dividir (cada página / por rangos `1-3, 5, 7-9`) | iLovePDF | |
+| Organizar páginas (reordenar, rotar, eliminar, extraer) | iLovePDF, Xodo | Con miniaturas |
+| Firmar y añadir texto/fecha | Adobe Fill & Sign, Xodo | Firma dibujada y guardada para reutilizar; arrastrar y redimensionar sobre la página |
+| Comprimir (3 niveles) | Smallpdf | Recomprime imágenes; muestra el ahorro |
+| Proteger con contraseña / quitar contraseña | iLovePDF | AES-256 |
+| Numerar páginas | iLovePDF | |
+| Marca de agua de texto (opcional, la pones tú) | iLovePDF | |
+| PDF → imágenes JPG | iLovePDF, Smallpdf | |
+| Extraer texto de un PDF | Smallpdf | |
+| Visor de PDF + "Abrir con PDFScan" | Xodo, Adobe | Abrir PDFs desde cualquier gestor de archivos |
+
+Fuera de alcance (requiere servidor o motores pesados): convertir PDF ↔ Word/Excel/PowerPoint con fidelidad,
+editar el texto original de un PDF.
+
+---
+
 ## Fuentes
 
 - [Best Scanner Apps in 2026 — TechnBrains](https://www.technbrains.com/blog/best-scanner-apps/)
@@ -296,3 +334,13 @@ Si algún día se monetiza, evitar los anti-patrones de la sección 3:
 - [ML Kit Document Scanner API — Android Developers Blog](https://android-developers.googleblog.com/2024/02/ml-kit-document-scanner-api.html)
 - [FairScan — Privacy Guides discussion](https://discuss.privacyguides.net/t/fairscan-a-simple-and-respectful-document-scanner-for-android/31915)
 - [MakeACopy — IzzyOnDroid F-Droid repo](https://apt.izzysoft.de/ftp/repo/fdroid/index/apk/de.schliweb.makeacopy?repo=main)
+- [Best Free PDF Editor Apps for Android 2026 — Wondershare](https://pdf.wondershare.com/mobile-app/best-app-to-edit-pdf-on-android.html)
+- [15 Best PDF Editor Apps for Android 2026 — Slidesdown](https://slidesdown.com/blog/best-pdf-editor-android-apps/)
+- [Best PDF Editor for Android 2026 — LightPDF](https://lightpdf.com/best-pdf-editor-android.html)
+- [iLovePDF on Google Play — AppFollow](https://apps.appfollow.io/android/ilovepdf-pdf-editor-scanner/com.ilovepdf.www?country=gb)
+- [iLovePDF reviews — JustUseApp](https://justuseapp.com/en/app/1207332399/ilovepdf-pdf-editor-scan/reviews)
+- [iLovePDF reviews — Capterra](https://www.capterra.com/p/173963/iLovePDF/reviews/)
+- [Xodo reviews — Capterra](https://www.capterra.com/p/210439/Xodo/reviews/)
+- [Xodo — AlternativeTo](https://alternativeto.net/software/xodo/about)
+- [PDFgear for Android — PR Newswire](https://prnewswire.com/news-releases/pdfgear-the-most-popular-free-pdf-editor-is-finally-on-android-302308990.html)
+- [PDFgear review — TechRadar](https://www.techradar.com/pro/software-services/pdfgear-review)

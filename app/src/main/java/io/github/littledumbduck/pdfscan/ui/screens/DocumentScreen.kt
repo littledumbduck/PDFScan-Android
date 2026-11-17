@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
@@ -84,6 +85,7 @@ fun DocumentScreen(
     onAddPages: () -> Unit,
     onExport: (password: String?) -> Unit,
     onShowText: () -> Unit,
+    onOpenInTools: () -> Unit,
 ) {
     val docs by vm.allDocuments.collectAsStateWithLifecycle()
     val ocrRunning by vm.ocrRunning.collectAsStateWithLifecycle()
@@ -176,6 +178,11 @@ fun DocumentScreen(
                                     text = { Text("Guardar PDF con contraseña…") },
                                     leadingIcon = { Icon(Icons.Default.Lock, null) },
                                     onClick = { moreMenu = false; dialog = DocDialog.EXPORT_PASSWORD },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Firmar / herramientas PDF") },
+                                    leadingIcon = { Icon(Icons.Default.Draw, null) },
+                                    onClick = { moreMenu = false; onOpenInTools() },
                                 )
                                 HorizontalDivider()
                                 DropdownMenuItem(

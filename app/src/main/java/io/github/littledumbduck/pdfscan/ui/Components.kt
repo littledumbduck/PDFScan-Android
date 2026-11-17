@@ -57,11 +57,10 @@ fun FileImage(
 ) {
     val key = "${file.absolutePath}:${file.lastModified()}:$maxPx"
     val bitmap by produceState(ThumbCache.cache.get(key), key) {
-        if (value == null) {
-            value = withContext(Dispatchers.IO) {
-                runCatching { ImageUtils.decodeFile(file, maxPx) }.getOrNull()
-            }?.also { ThumbCache.cache.put(key, it) }
-        }
+        // La clave cambia al rotar/filtrar una página: siempre se recalcula.
+        value = ThumbCache.cache.get(key) ?: withContext(Dispatchers.IO) {
+            runCatching { ImageUtils.decodeFile(file, maxPx) }.getOrNull()
+        }?.also { ThumbCache.cache.put(key, it) }
     }
     val bmp = bitmap
     if (bmp != null) {
