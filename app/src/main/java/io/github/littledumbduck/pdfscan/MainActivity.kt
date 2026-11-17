@@ -92,11 +92,11 @@ class MainActivity : ComponentActivity() {
 
     // --- Herramientas PDF
     private val pickToolPdf = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { tvm.pickUri(it, InputTarget.SINGLE) }
+        uri?.let { tvm.pickUris(listOf(it), InputTarget.SINGLE) }
     }
 
     private val pickMergePdfs = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        uris.forEach { tvm.pickUri(it, InputTarget.MERGE) }
+        if (uris.isNotEmpty()) tvm.pickUris(uris, InputTarget.MERGE)
     }
 
     private val saveToolPdf = registerForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->

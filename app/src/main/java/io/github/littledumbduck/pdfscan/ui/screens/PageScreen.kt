@@ -60,7 +60,9 @@ fun PageScreen(
 ) {
     val docs by vm.allDocuments.collectAsStateWithLifecycle()
     val doc = docs.firstOrNull { it.id == docId }
-    LaunchedEffect(doc == null || doc.pages.isEmpty()) { if (doc == null || doc.pages.isEmpty()) onBack() }
+    val loaded by vm.loaded.collectAsStateWithLifecycle()
+    val gone = doc == null || doc.pages.isEmpty()
+    LaunchedEffect(loaded, gone) { if (loaded && gone) onBack() }
     if (doc == null || doc.pages.isEmpty()) return
 
     val pager = rememberPagerState(initialPage = initialIndex.coerceIn(0, doc.pages.lastIndex)) { doc.pages.size }

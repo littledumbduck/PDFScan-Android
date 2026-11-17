@@ -41,6 +41,10 @@ class DocumentRepository(private val context: Context) {
     private val _documents = MutableStateFlow<List<ScanDocument>>(emptyList())
     val documents: StateFlow<List<ScanDocument>> = _documents.asStateFlow()
 
+    /** true cuando la biblioteca ya se ha leído del disco (evita cerrar pantallas antes de tiempo). */
+    private val _loaded = MutableStateFlow(false)
+    val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
+
     fun get(id: String): ScanDocument? = _documents.value.firstOrNull { it.id == id }
 
     fun pageFile(docId: String, fileName: String) = File(File(File(root, docId), "pages"), fileName)
@@ -52,6 +56,7 @@ class DocumentRepository(private val context: Context) {
                 runCatching { scanDocumentFromJson(JSONObject(File(dir, META).readText())) }.getOrNull()
             }
             _documents.value = docs.sortedByDescending { it.updatedAt }
+            _loaded.value = true
         }
     }
 
@@ -78,7 +83,8 @@ class DocumentRepository(private val context: Context) {
                 PdfRenderer(it).use { renderer ->
                     for (i in 0 until renderer.pageCount) {
                         renderer.openPage(i).use { page ->
-                            val scale = 200f / 72f // 200 ppp
+                            // 200 ppp, limitado a ~4000 px de lado para no agotar la memoria con páginas enormes
+                            val scale = minOf(200f / 72f, 4000f / maxOf(page.width, page.height))
                             val bmp = Bitmap.createBitmap(
                                 (page.width * scale).toInt().coerceAtLeast(1),
                                 (page.height * scale).toInt().coerceAtLeast(1),
@@ -159,10 +165,15 @@ class DocumentRepository(private val context: Context) {
         })
     }
 
-    suspend fun setOcr(id: String, file: String, ocr: OcrResult): ScanDocument? = withContext(Dispatchers.IO) {
+    /**
+     * Guarda el OCR de una página. Si la imagen ha cambiado mientras se analizaba (rotada, filtrada),
+     * [analyzedVersion] ya no coincide y el resultado se descarta.
+     */
+    suspend fun setOcr(id: String, file: String, ocr: OcrResult, analyzedVersion: Long): ScanDocument? = withContext(Dispatchers.IO) {
         mutex.withLock {
             val doc = get(id) ?: return@withLock null
             if (doc.pages.none { it.file == file }) return@withLock doc
+            if (pageFile(id, file).lastModified() != analyzedVersion) return@withLock doc
             val updated = doc.copy(pages = doc.pages.map { if (it.file == file) it.copy(ocr = ocr) else it })
             // El OCR no cambia la fecha de modificación (no reordena la biblioteca).
             save(updated)

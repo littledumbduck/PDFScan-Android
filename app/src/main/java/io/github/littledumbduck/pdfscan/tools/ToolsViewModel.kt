@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import io.github.littledumbduck.pdfscan.PdfScanApp
 import io.github.littledumbduck.pdfscan.util.ShareUtils
@@ -14,6 +15,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -47,7 +51,7 @@ enum class SplitMode(val label: String) {
     EXTRACT("Extraer los rangos en un solo PDF"),
 }
 
-class ToolsViewModel(app: Application) : AndroidViewModel(app) {
+class ToolsViewModel(app: Application, private val saved: SavedStateHandle) : AndroidViewModel(app) {
 
     private val container = app as PdfScanApp
     private val workDir = File(app.filesDir, "pdf_work").apply { mkdirs() }
@@ -67,8 +71,10 @@ class ToolsViewModel(app: Application) : AndroidViewModel(app) {
     private val _result = MutableStateFlow<ToolResult?>(null)
     val result: StateFlow<ToolResult?> = _result.asStateFlow()
 
-    private val _passwordRequest = MutableStateFlow<PasswordRequest?>(null)
-    val passwordRequest: StateFlow<PasswordRequest?> = _passwordRequest.asStateFlow()
+    /** Cola de PDFs que piden contraseña (puede haber varios al unir). Se muestra el primero. */
+    private val _passwordQueue = MutableStateFlow<List<PasswordRequest>>(emptyList())
+    val passwordRequest: StateFlow<PasswordRequest?> =
+        _passwordQueue.map { it.firstOrNull() }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _busy = MutableStateFlow<String?>(null)
     val busy: StateFlow<String?> = _busy.asStateFlow()
@@ -80,39 +86,56 @@ class ToolsViewModel(app: Application) : AndroidViewModel(app) {
     private val _navigate = Channel<String>(Channel.BUFFERED)
     val navigate = _navigate.receiveAsFlow()
 
-    /** Archivo pendiente de "Guardar en…" mientras el usuario elige destino. */
-    var pendingSave: File? = null
+    /** Archivo pendiente de "Guardar en…" mientras el usuario elige destino (sobrevive al cierre de la app). */
+    var pendingSave: File?
+        get() = saved.get<String>("pendingSave")?.let(::File)
+        set(value) { saved["pendingSave"] = value?.absolutePath }
 
     init {
         // Limpia copias de trabajo de más de un día.
         val limit = System.currentTimeMillis() - 24L * 3600 * 1000
         workDir.listFiles()?.filter { it.lastModified() < limit }?.forEach { it.deleteRecursively() }
+        // Carpetas de "PDF a imágenes" antiguas (no aparecen en "Mis archivos").
+        outDir.listFiles { f -> f.isDirectory && f.name.startsWith("img_") && f.lastModified() < limit }
+            ?.forEach { it.deleteRecursively() }
     }
 
     // ------------------------------------------------------------------ entradas
 
     fun clearInput() { _input.value = null }
 
-    fun pickUri(uri: Uri, target: InputTarget) = work("Abriendo PDF…") {
+    /** Prepara uno o varios PDFs elegidos, uno detrás de otro (así se respeta el orden al unir). */
+    fun pickUris(uris: List<Uri>, target: InputTarget) = work("Abriendo PDF…") {
         val ctx = getApplication<Application>()
-        val name = displayName(uri)
-        val raw = File(workDir, "raw_${UUID.randomUUID()}.pdf")
-        withContext(Dispatchers.IO) {
-            ctx.contentResolver.openInputStream(uri)?.use { input -> raw.outputStream().use { input.copyTo(it) } }
-                ?: error("No se pudo leer el archivo")
+        for (uri in uris) {
+            try {
+                val name = displayName(uri)
+                val raw = File(workDir, "raw_${UUID.randomUUID()}.pdf")
+                withContext(Dispatchers.IO) {
+                    ctx.contentResolver.openInputStream(uri)?.use { input -> raw.outputStream().use { input.copyTo(it) } }
+                        ?: error("No se pudo leer el archivo")
+                }
+                prepare(raw, name, target, password = null)
+            } catch (e: Exception) {
+                _messages.send("No se pudo abrir ${displayName(uri)}: ${e.message ?: e.javaClass.simpleName}")
+            }
         }
-        prepare(raw, name, target, password = null)
     }
 
     fun submitPassword(password: String) {
-        val req = _passwordRequest.value ?: return
-        _passwordRequest.value = null
+        val req = _passwordQueue.value.firstOrNull() ?: return
+        _passwordQueue.update { it.drop(1) }
         work("Abriendo PDF…") { prepare(req.file, req.name, req.target, password, req.openViewer) }
     }
 
     fun cancelPassword() {
-        _passwordRequest.value?.file?.delete()
-        _passwordRequest.value = null
+        _passwordQueue.value.firstOrNull()?.file?.delete()
+        _passwordQueue.update { it.drop(1) }
+    }
+
+    private fun askPassword(req: PasswordRequest) {
+        // Un reintento (contraseña incorrecta) va delante; los nuevos, a la cola.
+        _passwordQueue.update { if (req.wrong) listOf(req) + it else it + req }
     }
 
     private suspend fun prepare(raw: File, name: String, target: InputTarget, password: String?, openViewer: Boolean = false) {
@@ -120,7 +143,7 @@ class ToolsViewModel(app: Application) : AndroidViewModel(app) {
         val pages = try {
             PdfTools.normalize(raw, clean, password)
         } catch (_: PdfPasswordException) {
-            _passwordRequest.value = PasswordRequest(raw, name, target, wrong = password != null, openViewer = openViewer)
+            askPassword(PasswordRequest(raw, name, target, wrong = password != null, openViewer = openViewer))
             return
         }
         raw.delete()
@@ -261,6 +284,7 @@ class ToolsViewModel(app: Application) : AndroidViewModel(app) {
         val base = ShareUtils.safeFileName(pdf.name.removeSuffix(".pdf"))
         val dir = File(outDir, "img_${UUID.randomUUID().toString().take(8)}").apply { mkdirs() }
         val files = PdfPreview.toImages(pdf.file, dpi) { i -> File(dir, "${base}_${i + 1}.jpg") }
+        dir.setLastModified(System.currentTimeMillis())
         finish(ToolResult("PDF convertido a imágenes", files, "${files.size} imágenes JPG", images = true), refresh = false)
     }
 
@@ -341,7 +365,7 @@ class ToolsViewModel(app: Application) : AndroidViewModel(app) {
             _navigate.send("viewer/${Uri.encode(clean.absolutePath)}")
         } catch (_: PdfPasswordException) {
             clean.parentFile?.delete()
-            _passwordRequest.value = PasswordRequest(raw, name, InputTarget.SINGLE, openViewer = true)
+            askPassword(PasswordRequest(raw, name, InputTarget.SINGLE, openViewer = true))
         }
     }
 

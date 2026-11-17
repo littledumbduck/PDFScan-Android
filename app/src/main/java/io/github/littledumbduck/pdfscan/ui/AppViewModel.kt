@@ -3,6 +3,7 @@ package io.github.littledumbduck.pdfscan.ui
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import io.github.littledumbduck.pdfscan.PdfScanApp
 import io.github.littledumbduck.pdfscan.data.AppSettings
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -26,7 +28,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.Normalizer
 
-class AppViewModel(app: Application) : AndroidViewModel(app) {
+class AppViewModel(app: Application, private val saved: SavedStateHandle) : AndroidViewModel(app) {
 
     private val container = app as PdfScanApp
     private val repo = container.repository
@@ -42,9 +44,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val nq = normalize(q.trim())
         if (nq.isEmpty()) docs
         else docs.filter { normalize(it.name).contains(nq) || normalize(it.fullText).contains(nq) }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val allDocuments: StateFlow<List<ScanDocument>> = repo.documents
+    val loaded: StateFlow<Boolean> = repo.loaded
 
     private val _busy = MutableStateFlow<String?>(null)
     val busy: StateFlow<String?> = _busy.asStateFlow()
@@ -59,11 +62,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _openDocument = Channel<String>(Channel.BUFFERED)
     val openDocument = _openDocument.receiveAsFlow()
 
-    /** Si no es null, el próximo escaneo añade páginas a este documento en lugar de crear uno nuevo. */
-    var scanTarget: String? = null
+    /**
+     * Si no es null, el próximo escaneo añade páginas a este documento en lugar de crear uno nuevo.
+     * Se guarda en SavedStateHandle: Android puede cerrar la app mientras la cámara está abierta.
+     */
+    var scanTarget: String?
+        get() = saved["scanTarget"]
+        set(value) { saved["scanTarget"] = value }
 
     /** Exportación pendiente mientras el usuario elige dónde guardar (selector del sistema). */
-    var pendingExport: PendingExport? = null
+    private var exportPassword: String? = null // solo en memoria, nunca en el estado guardado
+    var pendingExport: PendingExport?
+        get() = saved.get<String>("exportDoc")?.let { PendingExport(it, exportPassword) }
+        set(value) {
+            saved["exportDoc"] = value?.docId
+            saved["exportHasPassword"] = value?.password != null
+            exportPassword = value?.password
+        }
 
     data class PendingExport(val docId: String, val password: String?)
 
@@ -170,10 +185,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ocrMutex.withLock {
                 _ocrRunning.update { it + id }
                 try {
-                    val doc = repo.get(id) ?: return@withLock
-                    for (page in doc.pages.filter { it.ocr == null }) {
-                        val result = container.ocr.recognize(repo.pageFile(doc, page))
-                        repo.setOcr(id, page.file, result)
+                    // Si una página cambia durante el análisis (rotar/filtro) su resultado se descarta
+                    // y se vuelve a analizar en la siguiente vuelta.
+                    repeat(3) {
+                        val doc = repo.get(id) ?: return@withLock
+                        val pending = doc.pages.filter { it.ocr == null }
+                        if (pending.isEmpty()) return@repeat
+                        for (page in pending) {
+                            val file = repo.pageFile(doc, page)
+                            val version = file.lastModified()
+                            val result = container.ocr.recognize(file)
+                            repo.setOcr(id, page.file, result, version)
+                        }
                     }
                     if (notify) _messages.send("Texto reconocido")
                 } catch (e: Exception) {
@@ -229,7 +252,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Escribe el PDF en la ubicación elegida por el usuario con el selector del sistema. */
     fun writeExport(target: Uri) {
         val pending = pendingExport ?: return
+        val lostPassword = saved.get<Boolean>("exportHasPassword") == true && pending.password == null
         pendingExport = null
+        if (lostPassword) {
+            _messages.trySend("Se perdió la contraseña al cerrarse la app. Vuelve a intentarlo.")
+            return
+        }
         work("Guardando PDF…") {
             val ctx = getApplication<Application>()
             val doc = repo.get(pending.docId) ?: return@work

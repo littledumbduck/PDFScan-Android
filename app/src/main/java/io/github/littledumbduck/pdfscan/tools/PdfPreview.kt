@@ -71,7 +71,8 @@ object PdfPreview {
             val r = rendererFor(file)
             (0 until r.pageCount).map { i ->
                 r.openPage(i).use { page ->
-                    val scale = dpi / 72f
+                    // Límite de ~5000 px de lado para no agotar la memoria con páginas enormes
+                    val scale = minOf(dpi / 72f, 5000f / maxOf(page.width, page.height))
                     val bmp = Bitmap.createBitmap(
                         (page.width * scale).toInt().coerceAtLeast(1),
                         (page.height * scale).toInt().coerceAtLeast(1),

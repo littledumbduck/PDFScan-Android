@@ -125,11 +125,15 @@ object PdfTools {
     /** Recomprime las imágenes del PDF. Devuelve (tamaño antes, tamaño después). */
     suspend fun compress(input: File, level: CompressLevel, out: File): Pair<Long, Long> = io {
         open(input).use { doc ->
+            // Una misma imagen puede usarse en varias páginas (logos, fondos): se recomprime una sola vez.
+            val done = HashMap<Any, PDImageXObject?>()
             for (page in doc.pages) {
                 val res = page.resources ?: continue
                 for (name in res.xObjectNames.toList()) {
                     val img = res.getXObject(name) as? PDImageXObject ?: continue
-                    recompress(doc, img, level)?.let { res.put(name, it) }
+                    val key: Any = img.cosObject
+                    val replacement = if (done.containsKey(key)) done[key] else recompress(doc, img, level).also { done[key] = it }
+                    replacement?.let { res.put(name, it) }
                 }
             }
             doc.save(out)
@@ -147,7 +151,9 @@ object PdfTools {
                 val f = level.maxPx.toFloat() / longSide
                 Bitmap.createScaledBitmap(bmp, (bmp.width * f).roundToInt(), (bmp.height * f).roundToInt(), true)
             } else bmp
-            JPEGFactory.createFromImage(doc, scaled, level.quality)
+            val jpeg = JPEGFactory.createFromImage(doc, scaled, level.quality)
+            // Solo se usa si de verdad ocupa menos que la original.
+            if (jpeg.cosObject.length < img.cosObject.length) jpeg else null
         }
     } catch (_: Throwable) {
         null // formato de imagen no soportado: se deja tal cual

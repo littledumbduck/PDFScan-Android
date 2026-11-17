@@ -91,8 +91,9 @@ fun DocumentScreen(
     val ocrRunning by vm.ocrRunning.collectAsStateWithLifecycle()
     val doc = docs.firstOrNull { it.id == docId }
 
-    // El documento se ha eliminado (o aún no está cargado): volver.
-    LaunchedEffect(doc == null) { if (doc == null) onBack() }
+    val loaded by vm.loaded.collectAsStateWithLifecycle()
+    // El documento se ha eliminado: volver (solo cuando la biblioteca ya está cargada).
+    LaunchedEffect(loaded, doc == null) { if (loaded && doc == null) onBack() }
     if (doc == null) return
 
     var selection by remember { mutableStateOf(setOf<String>()) }
